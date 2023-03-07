@@ -1,4 +1,4 @@
-# Configuring OpenVPN To Support Remote Client Access On A Ubiquiti Dream Machine Pro
+# Configuring OpenVPN To Support Remote Access Clients On A Ubiquiti Dream Machine Pro
 
 The Unifi Dream Machine Pro (UDM) has OpenVPN installed but only enables its use for point-to-point VPN connections between the UDM and another network. The Unifi console software does not provide a way to configue OpenVPN as a VPN server that clients on the public internet can use to access the local LAN. This can be done manually, however. The challenge is doing so in a manner that will persist through UDM firmware upgrades and reboots.
 
