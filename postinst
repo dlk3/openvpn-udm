@@ -1,0 +1,88 @@
+#!/bin/sh -e
+
+# Previous package version on upgrade
+PREV_VERSION=$2
+
+case "$1" in
+    configure)
+	# continue below
+    ;;
+
+    abort-upgrade|abort-remove|abort-deconfigure)
+	exit 0
+    ;;
+
+    *)
+	echo "postinst called with unknown argument \`$1'" >&2
+	exit 0
+    ;;
+esac
+
+umask 022
+
+#  Use /volume1 as the persistent store if it exists
+DATADIR="/data/openvpn"
+if [ -d /volume1/.srv ]; then
+	DATADIR="/volume1/openvpn"
+	if [ ! -d $DATADIR ]; then
+		mkdir $DATADIR
+		mv /data/openvpn/* ${DATADIR}/
+	fi
+	rm -fr /data/openvpn
+	sed -i "s|DATADIR=\"/data/openvpn\"|DATADIR=\"${DATADIR}\"|" "${DATADIR}/server/openvpn-server.defaults"
+	sed -i "s|EnvironmentFile=/data/openvpn/server/openvpn-server.defaults|EnvironmentFile=${DATADIR}/server/openvpn-server.defaults|" /etc/systemd/system/openvpn-server.service
+	sed -i "s|/data/openvpn|${DATADIR}|g" "${DATADIR}/server/openvpn-server.conf"
+fi
+echo "\nopenvpn-server will keep its data in the $DATADIR directory."
+
+#  Create the PKI, if it doesn't already exist
+if [ ! -d "${DATADIR}/server/pki" ]; then
+	echo ""
+	echo "* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *"
+	echo "Generating the PKI infrastructure for OpenVPN, this will take about 5 minutes."
+	echo "Please be patient."
+	echo "* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *"
+	echo ""
+	cd "${DATADIR}/server"
+	${DATADIR}/easyrsa/easyrsa --batch --silent init-pki
+	echo "Creating the CA certificate"
+	${DATADIR}/easyrsa/easyrsa --batch --silent build-ca nopass
+	${DATADIR}/easyrsa/easyrsa --batch --silent build-server-full server nopass
+	${DATADIR}/easyrsa/easyrsa --batch --silent gen-dh
+	echo "Create an initial (empty) CRL file"
+	${DATADIR}/easyrsa/easyrsa --batch gen-crl
+	echo "Generating the tls-auth key"
+	/usr/sbin/openvpn --genkey --secret pki/private/ta.key
+	date
+	echo ""
+	echo "* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *"
+	echo "PKI setup is complete"
+	echo "* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *"
+fi
+
+#  Set the hostname in openvpn-server.conf and openvpn-server.defaults
+if grep -q -e "^local MY-UDM.SOMEDDNS.ORG" "${DATADIR}/server/openvpn-server.conf"; then
+	HOSTNAME=$(hostname)
+	sed -i "s/local MY-UDM.SOMEDDNS.ORG/local ${HOSTNAME}/" "${DATADIR}/server/openvpn-server.conf"
+	sed -i "s/HOSTNAME=\"MY-UDM.SOMEDDNS.ORG\"/HOSTNAME=${HOSTNAME}/" "${DATADIR}/server/openvpn-server.defaults"
+
+	echo ""
+	echo "\"${HOSTNAME}\" was the hostname we found and used for the OpenVPN server"
+	echo "name on this UDM.  If this is not the name this server is known by on the"
+	echo "internet, please edit these two files and change it:"
+	echo "* Change the \"local\" option in ${DATADIR}/server/openvpn-server.conf"
+	echo "* Change the \"HOSTNAME\" variable in ${DATADIR}/server/openvpn-server.defaults"
+fi
+
+#  Enable and start the openvpn-server.service
+systemctl daemon-reload
+systemctl reset-failed
+if [ -z "$PREV_VERSION" ]; then
+	systemctl enable openvpn-server
+fi
+systemctl -q is-enabled openvpn-server && systemctl restart openvpn-server
+
+#  Message to the user
+echo ""
+echo "Use the \"mk-ovpn\" script to generate OpenVPN profiles for your client devices."
+exit 0

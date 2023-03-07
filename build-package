@@ -1,0 +1,54 @@
+#!/usr/bin/env sh
+
+set -e
+
+PKGNAME="openvpn-server"
+PKGVER="1.0"
+PKGREL="1"
+PKGARCH="arm64"
+PKGMAINT="Dave King <dave@daveking.com>"
+PKGDESC="Running an OpenVPN Server on the Ubiquiti Dream Machine Pro
+ This package contains the configuration files and scripts necessary to run OpenVPN on the UDM as a server for remote clients"
+
+BUILDDIR=${PKGNAME}_${PKGVER}-${PKGREL}_${PKGARCH}
+
+rm -fr ${BUILDDIR} &>/dev/null
+mkdir -p ${BUILDDIR}/data/openvpn/easyrsa
+mkdir -p ${BUILDDIR}/data/openvpn/server
+mkdir ${BUILDDIR}/DEBIAN
+mkdir -p ${BUILDDIR}/etc/default
+mkdir -p ${BUILDDIR}/etc/systemd/system
+mkdir -p ${BUILDDIR}/usr/bin
+
+cp -v openvpn-server.conf ${BUILDDIR}/data/openvpn/server/
+cp -v postinst ${BUILDDIR}/DEBIAN/
+cp -v openvpn-server.defaults ${BUILDDIR}/data/openvpn/server/openvpn-server.defaults
+cp -v openvpn-server.service ${BUILDDIR}/etc/systemd/system/
+cp -v mk-ovpn openvpn-server-iptables-rules ${BUILDDIR}/usr/bin/
+chmod 755 ${BUILDDIR}/usr/bin/mk-ovpn ${BUILDDIR}/usr/bin/openvpn-server-iptables-rules
+
+#  Use a specific version of EasyRSA because its commands and command line options keep changing
+EASYRSA="3.1.2"
+wget -nv -P /tmp/ https://github.com/OpenVPN/easy-rsa/releases/download/v${EASYRSA}/EasyRSA-${EASYRSA}.tgz
+tar -C ${BUILDDIR}/data/openvpn/easyrsa --strip-components=1 -xf /tmp/EasyRSA-${EASYRSA}.tgz
+rm /tmp/EasyRSA-${EASYRSA}.tgz
+
+cat <<_EOF_ >${BUILDDIR}/DEBIAN/control
+Package: ${PKGNAME}
+Version: ${PKGVER}
+Architecture: ${PKGARCH}
+Maintainer: ${PKGMAINT}
+Description: ${PKGDESC}
+Depends: udmpro-al324-base-files (>=2.4)
+_EOF_
+
+dpkg-deb --build --root-owner-group ${BUILDDIR}
+#  dpkg-sig doesn't exist on Fedora ????
+#GNUPGHOME=${HOME}/src/udm-hacks/.gnupg
+#dpkg-sig --sign builder -k udm-hacks-repo@daveking.com *.deb
+
+mv -v ${BUILDDIR}.deb ${HOME}/src/udm-hacks/ppa/pool/main/o/openvpn-server/
+
+${HOME}/src/udm-hacks/update_ppa
+
+rm -fr ${BUILDDIR}

@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+
+#  Defaults file provides $HOSTNAME, $DATADIR and $VPNPORT
+if [ -f /volume1/openvpn/server/openvpn-server.defaults ]; then
+	source /volume1/openvpn/server/openvpn-server.defaults
+elif [ -f /data/openvpn/server/openvpn-server.defaults ]; then
+	source /data/openvpn/server/openvpn-server.defaults
+else
+	echo "Could not find the openvpn-server.defaults file"
+	exit 1
+fi
+
+if [ -z "$1" ] || [ "$1" == "-h" ]; then
+   echo "Create new OpenVPN configuration file for client:"
+   echo "    $0 client-name"
+   echo "Delete/revoke existing client configuration files and PKI certificates:"
+   echo "    $0 -d client-name"
+   exit 1
+fi
+
+set -e
+trap "echo \"Unexpected error occurred, check /tmp/easyrsa.log for more information\"" ERR
+
+cd "${DATADIR}/server"
+
+if [ "$1" == "-d" ]; then
+    [ -z "$2" ] && echo "Client name was not provided" && exit 1
+    ${DATADIR}/easyrsa/easyrsa --batch revoke "$2" &>/tmp/easyrsa.log
+	${DATADIR}/easyrsa/easyrsa --batch gen-crl &>>/tmp/easyrsa.log
+    rm "${DATADIR}/${2}.ovpn" &>/dev/null
+    echo "\"$2\" access revoked"
+	exit
+fi
+
+FN="$1"
+
+#  Create cert and key for this client, abort script with error messages if this fails
+${DATADIR}/easyrsa/easyrsa --batch build-client-full "$FN" nopass inline &>/tmp/easyrsa.log
+RC=$?
+if [ $RC -ne 0 ]; then
+    cat /tmp/easyrsa.log
+    rm /tmp/easyrsa.log
+    exit $RC
+fi
+
+#  Create client copnfig file containing our set of OpenVPN options
+cat <<__EOF__ >"${DATADIR}/${FN}.ovpn"
+dev tun
+proto udp
+remote $HOSTNAME $VPNPORT
+cipher AES-256-GCM
+auth SHA1
+resolv-retry infinite
+nobind
+persist-key
+persist-tun
+remote-cert-tls server
+key-direction 1
+client
+verb 3
+
+__EOF__
+#  Append certs inline in the config file
+echo "<tls-auth>" >>"${DATADIR}/${FN}.ovpn"
+grep -v -e '^#' "${DATADIR}/server/pki/private/ta.key" >>"${DATADIR}/${FN}.ovpn"
+echo "</tls-auth>" >>"${DATADIR}/${FN}.ovpn"
+
+grep -v -e '^#' "${DATADIR}/server/pki/inline/$1.inline" >>"${DATADIR}/${FN}.ovpn"
+
+echo "Client config file ready: ${DATADIR}/${FN}.ovpn"
