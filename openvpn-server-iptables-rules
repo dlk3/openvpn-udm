@@ -19,12 +19,12 @@ WAN_IF=$(ip -o addr show | grep ' scope global dynamic ' | cut -f2 -d\ )
 #  rules need to be issued in reverse order (bottom-to-top) inside this function.
 function iptables_rules () {
     #  Wait for chain to be present
-    while ! /sbin/iptables -L UBIOS_WAN_LOCAL_USER &>/dev/null; do
+    while ! /usr/sbin/iptables -L UBIOS_WAN_LOCAL_USER &>/dev/null; do
         sleep 5
     done
 
     #  Open the OpenVPN port on the WAN interface
-    /sbin/iptables $1 UBIOS_WAN_LOCAL_USER -i $WAN_IF -p udp --dport $VPNPORT -m conntrack --ctstate NEW -j RETURN
+    /usr/sbin/iptables $1 UBIOS_WAN_LOCAL_USER -i $WAN_IF -p udp --dport $VPNPORT -m conntrack --ctstate NEW -j RETURN
 }
 
 #  This function prevents duplicate iptables rules being put into the chains
@@ -32,9 +32,9 @@ function iptables () {
     ACTION=$(echo "$*" | sed 's/.*\(-I\|-D\) .*/\1/')
     TEST=$(echo "$*" | sed 's/\(.*\)-I\|-D \(.*\)/\1-C \2/')
     if [ "$ACTION" == "-D" ]; then
-        eval "/sbin/iptables $TEST &>/dev/null" && eval "/usr/sbin/iptables $*"
+        eval "/usr/sbin/iptables $TEST &>/dev/null" && eval "/usr/sbin/iptables $*"
     else
-        eval "/sbin/iptables $TEST &>/dev/null" || eval "/usr/sbin/iptables $*"
+        eval "/usr/sbin/iptables $TEST &>/dev/null" || eval "/usr/sbin/iptables $*"
     fi
     [ $? -eq 0 ] || echo "\"iptables $*\" command failed"
 }
