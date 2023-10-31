@@ -3,8 +3,8 @@
 set -e
 
 PKGNAME="openvpn-server"
-PKGVER="1.0"
-PKGREL="2"
+PKGVER="1.1"
+PKGREL="0"
 PKGARCH="arm64"
 PKGMAINT="Dave King <dave@daveking.com>"
 PKGDESC="Running an OpenVPN Server on the Ubiquiti Dream Machine Pro

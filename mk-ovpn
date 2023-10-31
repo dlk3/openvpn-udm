@@ -28,6 +28,7 @@ if [ "$1" == "-d" ]; then
     ${DATADIR}/easyrsa/easyrsa --batch revoke "$2" &>/tmp/easyrsa.log
 	${DATADIR}/easyrsa/easyrsa --batch gen-crl &>>/tmp/easyrsa.log
     rm "${DATADIR}/${2}.ovpn" &>/dev/null
+    systemctl restart openvpn-server
     echo "\"$2\" access revoked"
 	exit
 fi
